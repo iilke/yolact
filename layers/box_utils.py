@@ -29,7 +29,7 @@ def center_size(boxes):
     return torch.cat(( (boxes[:, 2:] + boxes[:, :2])/2,     # cx, cy
                         boxes[:, 2:] - boxes[:, :2]  ), 1)  # w, h
 
-@torch.jit.script
+# @torch.jit.script
 def intersect(box_a, box_b):
     """ We resize both tensors to [A,B,2] without new malloc:
     [A,2] -> [A,1,2] -> [A,B,2]
@@ -41,6 +41,10 @@ def intersect(box_a, box_b):
     Return:
       (tensor) intersection area, Shape: [n,A,B].
     """
+
+    if box_a.device != box_b.device:
+        box_b = box_b.to(box_a.device)
+
     n = box_a.size(0)
     A = box_a.size(1)
     B = box_b.size(1)
@@ -69,6 +73,9 @@ def jaccard(box_a, box_b, iscrowd:bool=False):
         box_a = box_a[None, ...]
         box_b = box_b[None, ...]
 
+    if box_a.device != box_b.device:
+        box_b = box_b.to(box_a.device)
+
     inter = intersect(box_a, box_b)
     area_a = ((box_a[:, :, 2]-box_a[:, :, 0]) *
               (box_a[:, :, 3]-box_a[:, :, 1])).unsqueeze(2).expand_as(inter)  # [A,B]
@@ -81,6 +88,10 @@ def jaccard(box_a, box_b, iscrowd:bool=False):
 
 def elemwise_box_iou(box_a, box_b):
     """ Does the same as above but instead of pairwise, elementwise along the inner dimension. """
+
+    if box_a.device != box_b.device:
+        box_b = box_b.to(box_a.device)
+
     max_xy = torch.min(box_a[:, 2:], box_b[:, 2:])
     min_xy = torch.max(box_a[:, :2], box_b[:, :2])
     inter = torch.clamp((max_xy - min_xy), min=0)
@@ -99,23 +110,28 @@ def mask_iou(masks_a, masks_b, iscrowd=False):
     """
     Computes the pariwise mask IoU between two sets of masks of size [a, h, w] and [b, h, w].
     The output is of size [a, b].
-
     Wait I thought this was "box_utils", why am I putting this in here?
     """
-
     masks_a = masks_a.view(masks_a.size(0), -1)
     masks_b = masks_b.view(masks_b.size(0), -1)
-
+    
+    # Ensure both tensors are on the same device
+    if masks_a.device != masks_b.device:
+        masks_b = masks_b.to(masks_a.device)
+  
     intersection = masks_a @ masks_b.t()
     area_a = masks_a.sum(dim=1).unsqueeze(1)
     area_b = masks_b.sum(dim=1).unsqueeze(0)
-
     return intersection / (area_a + area_b - intersection) if not iscrowd else intersection / area_a
 
 def elemwise_mask_iou(masks_a, masks_b):
     """ Does the same as above but instead of pairwise, elementwise along the outer dimension. """
     masks_a = masks_a.view(-1, masks_a.size(-1))
     masks_b = masks_b.view(-1, masks_b.size(-1))
+
+    if masks_a.device != masks_b.device:
+        masks_b = masks_b.to(masks_a.device)
+
 
     intersection = (masks_a * masks_b).sum(dim=0)
     area_a = masks_a.sum(dim=0)
@@ -136,6 +152,10 @@ def change(gt, priors):
     Output is of shape [num_gt, num_priors]
     Note this returns -change so it can be a drop in replacement for 
     """
+
+    if gt.device != priors.device:
+        priors = priors.to(gt.device)
+
     num_priors = priors.size(0)
     num_gt     = gt.size(0)
 
@@ -175,6 +195,11 @@ def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, co
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
+    if truths.device != priors.device:
+        priors = priors.to(truths.device)
+    if loc_data.device != priors.device:
+        loc_data = loc_data.to(priors.device)
+
     decoded_priors = decode(loc_data, priors, cfg.use_yolo_regressors) if cfg.use_prediction_matching else point_form(priors)
     
     # Size [num_objects, num_priors]
@@ -214,6 +239,9 @@ def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, co
 
     # Deal with crowd annotations for COCO
     if crowd_boxes is not None and cfg.crowd_iou_threshold < 1:
+        if decoded_priors.device != crowd_boxes.device:
+            crowd_boxes = crowd_boxes.to(decoded_priors.device)
+
         # Size [num_priors, num_crowds]
         crowd_overlaps = jaccard(decoded_priors, crowd_boxes, iscrowd=True)
         # Size [num_priors]

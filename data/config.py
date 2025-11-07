@@ -825,54 +825,27 @@ def set_dataset(dataset_name:str):
     cfg.dataset = eval(dataset_name)
 
 # ========= TTPLA (550x550) custom dataset =========
-TTPLA_CLASSES = ('tower', 'wire', 'spacer')  # <-- kendi sınıf listen neyse onu yaz
+TTPLA_CLASSES = ('cable', 'tower_lattice', 'tower_tucohy', 'tower_wooden')
 
 ttpla_550_dataset = dataset_base.copy({
-    'name': 'TTPLA_550',
-
-    # Images root (prepare_ttpla.ps1 sonrası)
-    'train_images': 'data/data_550x550/',
+    'name': 'ttpla_550',
+    'train_images': 'data/data_550x550/',   # bkz. madde 2
     'valid_images': 'data/data_550x550/',
-
-    # COCO-style annotation jsons (prepare_ttpla.ps1 sonrası)
-    'train_info': 'data/train_coco_550x550.json',
-    'valid_info': 'data/2_val_json550.json',
-
-    'class_names': TTPLA_CLASSES,
-    'label_map': None,  # COCO id map yoksa None
+    'train_info':  'data/train_coco_550x550.json',
+    'valid_info':  'data/2_val_json550.json',
+    'label_map': {0:1, 1:2, 2:3, 3:4},
 })
 
-# ========= YOLACT config for TTPLA 550 (ResNet50, no DCN) =========
-yolact_img550_resnet50_config = coco_base_config.copy({
-    'name': 'yolact_img550_resnet50',
-
-    # Image size
-    'max_size': 550,
-
-    # Dataset
+yolact_img550_resnet50_config = yolact_base_config.copy({
+    'name': 'yolact_img550_resnet50_config',
     'dataset': ttpla_550_dataset,
-    'num_classes': len(TTPLA_CLASSES) + 1,  # + background
-
-    # Backbone: plain ResNet50 (NO DCN)
-    'backbone': resnet50_backbone.copy({
-        'selected_layers': list(range(1, 4)),
-        'use_pixel_scales': True,
-        'preapply_sqrt': False,
-        'use_square_anchors': True,
-    }),
-
-    # Keep it lightweight for 4GB GPU
-    'batch_size': 1,          # effective if train.py reads from config
-    'fpn': fpn_base.copy({    # simple FPN, no DCNv2
-        'use_conv_downsample': True,
-        'num_downsample': 2,
-    }),
-
-    # Mask branch: default lincomb is fine
-    'mask_type': mask_type.lincomb,
-
-    # Disable features that may require extra CUDA ops on Windows
-    'use_maskiou': False,
+    'max_size': 550,
+    'backbone': resnet50_backbone.copy({ 'selected_layers': list(range(3)) }),
+    'class_names': TTPLA_CLASSES,
+    'num_classes': len(TTPLA_CLASSES) + 1,   # 4 sınıf + background = 5
+    'batch_size': 1,                         # 4GB VRAM için mantıklı
+    'freeze_bn': True,
+    'force_cpu_nms': True,                   # Windows/PyTorch 1.9 ile güvenli
+    'num_workers': 2,
 })
-
     

@@ -121,7 +121,7 @@ loss_types = ['B', 'C', 'M', 'P', 'D', 'E', 'S', 'I']
 
 if torch.cuda.is_available():
     if args.cuda:
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        pass  # patched: keep default CPU tensor (PyTorch 2.x fix)
     if not args.cuda:
         print("WARNING: It looks like you have a CUDA device, but aren't " +
               "using CUDA.\nRun with --cuda for optimal training speed.")
@@ -249,7 +249,8 @@ def train():
     data_loader = data.DataLoader(dataset, args.batch_size,
                                   num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate,
-                                  pin_memory=True)
+                                  pin_memory=True,
+                                  generator=torch.Generator(device='cpu'))
     
     
     save_path = lambda epoch, iteration: SavePath(cfg.name, epoch, iteration).get_path(root=args.save_folder)
@@ -502,3 +503,4 @@ def setup_eval():
 
 if __name__ == '__main__':
     train()
+
